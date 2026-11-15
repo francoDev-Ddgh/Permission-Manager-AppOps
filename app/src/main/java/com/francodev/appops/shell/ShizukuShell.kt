@@ -1,6 +1,9 @@
 package com.francodev.appops.shell
 
+import android.content.Context
 import android.content.pm.PackageManager
+import com.francodev.appops.data.SettingsStore
+import com.francodev.appops.data.WorkMode
 import rikka.shizuku.Shizuku
 
 enum class ShizukuStatus { NOT_RUNNING, NO_PERMISSION, READY }
@@ -11,6 +14,21 @@ data class ShellResult(val exitCode: Int, val stdout: String, val stderr: String
 
 object ShizukuShell {
     const val REQUEST_CODE = 1001
+
+    private var initialized = false
+
+    // Shizuku puede conectarse (binder) antes o después de que la app arranque.
+    // El listener "sticky" avisa también si el binder ya estaba conectado, y entonces pide permiso.
+    fun init(context: Context) {
+        if (initialized) return
+        initialized = true
+        val store = SettingsStore(context.applicationContext)
+        Shizuku.addBinderReceivedListenerSticky {
+            if (store.getWorkMode() == WorkMode.SHIZUKU && status() == ShizukuStatus.NO_PERMISSION) {
+                requestPermission()
+            }
+        }
+    }
 
     fun status(): ShizukuStatus = try {
         when {
