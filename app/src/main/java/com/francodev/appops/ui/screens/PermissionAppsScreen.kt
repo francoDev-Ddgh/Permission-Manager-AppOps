@@ -73,18 +73,14 @@ fun PermissionAppsScreen(
         if (entry.app.packageName in pending) return
         pending = pending + entry.app.packageName
         scope.launch {
-            val ok = setPermissionState(entry.app.packageName, permission, target)
-            if (ok) {
+            val result = setPermissionState(entry.app.packageName, permission, target)
+            if (result.success) {
                 apps = apps?.map {
                     if (it.app.packageName == entry.app.packageName) it.copy(active = target) else it
                 }
             } else {
                 snackbarHostState.showSnackbar(
-                    if (canToggle) {
-                        "No se pudo cambiar el permiso. Revisa que Shizuku tenga permiso."
-                    } else {
-                        "Este permiso solo se puede cambiar desde Ajustes del sistema."
-                    }
+                    result.message ?: "No se pudo cambiar el permiso."
                 )
             }
             pending = pending - entry.app.packageName
