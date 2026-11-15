@@ -65,21 +65,73 @@ suspend fun loadAppsUsingPermission(
 
     // Estos dos permisos se conceden desde Ajustes y se leen de Settings.Secure,
     // así que se resuelven con una sola consulta en lugar de una por app.
-    val enabledComponents = when (permission.name) {
-        "BIND_ACCESSIBILITY_SERVICE" -> enabledComponents("enabled_accessibility_services")
-        "BIND_NOTIFICATION_LISTENER_SERVICE" -> enabledComponents("enabled_notification_listeners")
-        else -> null
-    }
+    val enabled = enabledComponentsFor(permission)
 
     candidates.map { app ->
-        val active = if (enabledComponents != null) {
-            enabledComponents.any { it.startsWith("${app.packageName}/") }
+        val active = if (enabled != null) {
+            enabled.any { it.startsWith("${app.packageName}/") }
         } else {
             readState(context, app.packageName, permission)
         }
         AppPermissionState(app = app, active = active)
     }
 }
+
+/**
+ * Permiso del catálogo que usa una app concreta, con su estado.
+ */
+data class AppPermissionEntry(
+    val permission: ManagedPermission,
+    val active: Boolean
+)
+
+/**
+ * Permisos administrables que usa una app, listos para mostrar con un interruptor.
+ */
+suspend fun loadPermissionsForApp(
+    context: Context,
+    packageName: String
+): List<AppPermissionEntry> = withContext(Dispatchers.IO) {
+    val pm = context.packageManager
+    val pkg = runCatching {
+        pm.getPackageInfo(
+            packageName,
+            PackageManager.GET_PERMISSIONS or PackageManager.GET_ACTIVITIES
+        )
+    }.getOrNull() ?: return@withContext emptyList()
+
+    val requested = pkg.requestedPermissions?.toSet().orEmpty()
+    val supportsPip = pkg.activities?.any { activity ->
+        (activity.flags and FLAG_SUPPORTS_PICTURE_IN_PICTURE) != 0
+    } == true
+
+    managedPermissions.mapNotNull { permission ->
+        val uses = when (permission.source) {
+            PermissionSource.PIP_ACTIVITY -> supportsPip
+            PermissionSource.PERMISSION -> permission.manifestPermission
+                ?.let { "android.permission.$it" in requested } == true
+        }
+        if (!uses) return@mapNotNull null
+
+        val enabled = enabledComponentsFor(permission)
+        val active = if (enabled != null) {
+            enabled.any { it.startsWith("$packageName/") }
+        } else {
+            readState(context, packageName, permission)
+        }
+        AppPermissionEntry(permission = permission, active = active)
+    }
+}
+
+/**
+ * Para accesibilidad y acceso a notificaciones el estado vive en Settings.Secure.
+ */
+private fun enabledComponentsFor(permission: ManagedPermission): Set<String>? =
+    when (permission.name) {
+        "BIND_ACCESSIBILITY_SERVICE" -> enabledComponents("enabled_accessibility_services")
+        "BIND_NOTIFICATION_LISTENER_SERVICE" -> enabledComponents("enabled_notification_listeners")
+        else -> null
+    }
 
 /**
  * Apps que declaran el permiso en su manifiesto.

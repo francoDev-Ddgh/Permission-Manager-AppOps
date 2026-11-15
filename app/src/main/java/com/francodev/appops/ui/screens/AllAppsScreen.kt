@@ -42,6 +42,18 @@ import kotlinx.coroutines.withContext
 fun AllAppsScreen(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
+    var selectedPackage by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val current = selectedPackage
+    if (current != null) {
+        AppDetailScreen(
+            packageName = current,
+            onBack = { selectedPackage = null },
+            modifier = modifier
+        )
+        return
+    }
+
     val apps by produceState(initialValue = emptyList<UserApp>(), context) {
         value = withContext(Dispatchers.IO) { loadUserApps(context.packageManager) }
     }
@@ -78,7 +90,10 @@ fun AllAppsScreen(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(visibleApps, key = { it.packageName }) { app ->
-                AppRow(app = app)
+                AppRow(
+                    app = app,
+                    onClick = { selectedPackage = app.packageName }
+                )
             }
         }
     }

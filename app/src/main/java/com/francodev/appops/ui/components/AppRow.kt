@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.francodev.appops.data.UserApp
@@ -36,52 +37,76 @@ import kotlinx.coroutines.withContext
 fun AppRow(
     app: UserApp,
     modifier: Modifier = Modifier,
-    trailing: (@Composable () -> Unit)? = null
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            AppIcon(packageName = app.packageName)
-            Spacer(Modifier.width(16.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = app.label,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = app.packageName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            trailing?.let {
-                Spacer(Modifier.width(12.dp))
-                it()
-            }
+            AppRowContent(app = app, trailing = trailing)
+        }
+    } else {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            AppRowContent(app = app, trailing = trailing)
         }
     }
 }
 
 @Composable
-private fun AppIcon(packageName: String) {
+private fun AppRowContent(app: UserApp, trailing: (@Composable () -> Unit)?) {
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppIcon(packageName = app.packageName)
+        Spacer(Modifier.width(16.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = app.label,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = app.packageName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        trailing?.let {
+            Spacer(Modifier.width(12.dp))
+            it()
+        }
+    }
+}
+
+@Composable
+fun AppIcon(
+    packageName: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp,
+    corner: Dp = 14.dp
+) {
     val context = LocalContext.current
     val icon by produceState<ImageBitmap?>(initialValue = null, packageName) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                context.packageManager.getApplicationIcon(packageName).toBitmap(96, 96).asImageBitmap()
+                context.packageManager.getApplicationIcon(packageName)
+                    .toBitmap(size.value.toInt() * 2, size.value.toInt() * 2)
+                    .asImageBitmap()
             }.getOrNull()
         }
     }
@@ -90,9 +115,9 @@ private fun AppIcon(packageName: String) {
         Image(
             bitmap = bitmap,
             contentDescription = null,
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
+            modifier = modifier.size(size).clip(RoundedCornerShape(corner))
         )
     } else {
-        Spacer(Modifier.size(44.dp))
+        Spacer(Modifier.size(size))
     }
 }
