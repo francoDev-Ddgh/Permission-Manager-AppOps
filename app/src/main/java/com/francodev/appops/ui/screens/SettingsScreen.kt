@@ -123,11 +123,6 @@ private fun WorkModeScreen(store: SettingsStore, onBack: () -> Unit) {
         Shizuku.addBinderReceivedListener(binderReceivedListener)
         Shizuku.addBinderDeadListener(binderDeadListener)
 
-        // Si Shizuku ya está activo, pedimos permiso al entrar para que la app aparezca en Shizuku.
-        if (shizukuStatus == ShizukuStatus.NO_PERMISSION) {
-            ShizukuShell.requestPermission()
-        }
-
         onDispose {
             Shizuku.removeRequestPermissionResultListener(permissionListener)
             Shizuku.removeBinderReceivedListener(binderReceivedListener)
@@ -161,10 +156,11 @@ private fun WorkModeScreen(store: SettingsStore, onBack: () -> Unit) {
                     onSelect = {
                         selected = mode
                         store.setWorkMode(mode)
-                        shizukuStatus = ShizukuShell.status()
-                        if (mode == WorkMode.SHIZUKU && shizukuStatus == ShizukuStatus.NO_PERMISSION) {
+                        if (mode == WorkMode.SHIZUKU) {
+                            // Pide permiso siempre que se elige Shizuku, para que salga la ventana de Shizuku.
                             ShizukuShell.requestPermission()
                         }
+                        shizukuStatus = ShizukuShell.status()
                     }
                 )
             }
@@ -172,7 +168,11 @@ private fun WorkModeScreen(store: SettingsStore, onBack: () -> Unit) {
                 item {
                     ShizukuStatusCard(
                         status = shizukuStatus,
-                        onRequest = { ShizukuShell.requestPermission() }
+                        onRequest = { ShizukuShell.requestPermission() },
+                        onRetry = {
+                            shizukuStatus = ShizukuShell.status()
+                            ShizukuShell.requestPermission()
+                        }
                     )
                 }
             }
@@ -218,7 +218,11 @@ private fun WorkModeOption(mode: WorkMode, selected: Boolean, onSelect: () -> Un
 }
 
 @Composable
-private fun ShizukuStatusCard(status: ShizukuStatus, onRequest: () -> Unit) {
+private fun ShizukuStatusCard(
+    status: ShizukuStatus,
+    onRequest: () -> Unit,
+    onRetry: () -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -232,18 +236,23 @@ private fun ShizukuStatusCard(status: ShizukuStatus, onRequest: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = when (status) {
-                    ShizukuStatus.NOT_RUNNING -> "Shizuku no está conectado. Abre Shizuku, inícialo y vuelve a esta pantalla."
+                    ShizukuStatus.NOT_RUNNING -> "Shizuku no está conectado. Ábrelo, inícialo y pulsa Reintentar."
                     ShizukuStatus.NO_PERMISSION -> "Shizuku está activo, pero esta app todavía no tiene permiso."
                     ShizukuStatus.READY -> "Shizuku está listo para ejecutar comandos."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (status == ShizukuStatus.NO_PERMISSION) {
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = onRequest) {
-                    Text("Pedir permiso")
+            when (status) {
+                ShizukuStatus.NO_PERMISSION -> {
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = onRequest) { Text("Pedir permiso") }
                 }
+                ShizukuStatus.NOT_RUNNING -> {
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = onRetry) { Text("Reintentar") }
+                }
+                ShizukuStatus.READY -> Unit
             }
         }
     }
