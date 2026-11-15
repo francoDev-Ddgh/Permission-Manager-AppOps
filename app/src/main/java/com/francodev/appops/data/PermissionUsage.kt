@@ -29,12 +29,15 @@ suspend fun loadAppsUsingPermission(
     val pm = context.packageManager
     val fullPermission = "android.permission.${permission.name}"
 
-    val candidates = pm.getInstalledApplications(PackageManager.GET_PERMISSIONS)
+    val candidates = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
         .asSequence()
-        .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
-        .filter { it.packageName != context.packageName }
-        .filter { it.requestedPermissions?.contains(fullPermission) == true }
-        .map { UserApp(packageName = it.packageName, label = pm.getApplicationLabel(it).toString()) }
+        .mapNotNull { pkg -> pkg.applicationInfo?.let { pkg to it } }
+        .filter { (_, info) -> (info.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
+        .filter { (pkg, _) -> pkg.packageName != context.packageName }
+        .filter { (pkg, _) -> pkg.requestedPermissions?.contains(fullPermission) == true }
+        .map { (pkg, info) ->
+            UserApp(packageName = pkg.packageName, label = pm.getApplicationLabel(info).toString())
+        }
         .sortedBy { it.label.lowercase() }
         .toList()
 
