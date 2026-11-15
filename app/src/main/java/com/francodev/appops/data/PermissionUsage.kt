@@ -1,7 +1,6 @@
 package com.francodev.appops.data
 
 import android.content.Context
-import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.francodev.appops.shell.ShizukuShell
@@ -106,6 +105,9 @@ private fun appsDeclaring(context: Context, permission: ManagedPermission): List
 /**
  * Apps con alguna actividad marcada con `android:supportsPictureInPicture="true"`.
  * La imagen en imagen no tiene permiso en el manifiesto, se declara por actividad.
+ *
+ * El flag es 0x400000 (ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE), pero esa
+ * constante no está expuesta en los stubs públicos del SDK.
  */
 private fun pipCapableApps(context: Context): List<UserApp> {
     val pm = context.packageManager
@@ -115,7 +117,7 @@ private fun pipCapableApps(context: Context): List<UserApp> {
         .filter { it.packageName != context.packageName }
         .filter { pkg ->
             pkg.activities?.any { activity ->
-                (activity.flags and ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE) != 0
+                (activity.flags and FLAG_SUPPORTS_PICTURE_IN_PICTURE) != 0
             } == true
         }
         .mapNotNull { pkg ->
@@ -126,6 +128,8 @@ private fun pipCapableApps(context: Context): List<UserApp> {
         .sortedBy { it.label.lowercase() }
         .toList()
 }
+
+private const val FLAG_SUPPORTS_PICTURE_IN_PICTURE = 0x400000
 
 private fun readState(
     context: Context,
