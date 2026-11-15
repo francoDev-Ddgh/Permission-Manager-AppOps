@@ -1,15 +1,12 @@
 // IShellService.aidl
 package com.francodev.appops.shell;
 
-// Importar la clase Parcelable
 import com.francodev.appops.shell.ShellResult;
 
-// Interfaz para ejecutar comandos shell desde el UserService
 interface IShellService {
-    /**
-     * Ejecuta un comando y retorna el resultado.
-     * @param command Array de argumentos del comando
-     * @return ShellResult con exitCode, stdout y stderr
-     */
+
+    // Código de transacción fijo que usa el servidor de Shizuku para destruir el UserService.
+    void destroy() = 16777114;
+
     ShellResult executeCommand(in String[] command);
 }

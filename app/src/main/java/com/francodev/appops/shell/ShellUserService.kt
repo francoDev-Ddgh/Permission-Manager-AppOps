@@ -1,44 +1,43 @@
 package com.francodev.appops.shell
 
-import android.os.IBinder
 import android.util.Log
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /**
- * UserService que ejecuta comandos shell con privilegios de ADB/root.
+ * UserService que ejecuta comandos con el UID de shell (2000) o root (0), según
+ * cómo esté ejecutándose Shizuku.
  *
- * Este servicio corre en un proceso separado con el UID de shell (2000) o root (0),
- * dependiendo de cómo esté configurado Shizuku.
- *
- * Uso: Se vincula mediante Shizuku.bindUserService() desde ShizukuShell.
+ * Vive en un proceso aparte y se vincula desde [ShizukuShell] con
+ * `Shizuku.bindUserService`.
  */
 class ShellUserService : IShellService.Stub() {
 
-    override fun executeCommand(command: Array<String>): ShellResult {
+    override fun executeCommand(command: Array<out String>): ShellResult {
         return try {
             val process = ProcessBuilder(*command).start()
-            val stdout = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
-            val stderr = BufferedReader(InputStreamReader(process.errorStream)).use { it.readText() }
+            val stdout = process.inputStream.bufferedReader()
+                .use(BufferedReader::readText)
+            val stderr = process.errorStream.bufferedReader()
+                .use(BufferedReader::readText)
             val exitCode = process.waitFor()
             ShellResult(exitCode, stdout.trim(), stderr.trim())
         } catch (e: Exception) {
-            Log.e("ShellUserService", "Error executing command: ${command.joinToString(" ")}", e)
+            Log.e(TAG, "Error ejecutando: ${command.joinToString(" ")}", e)
             ShellResult(-1, "", e.message ?: "Error desconocido")
         }
     }
 
     /**
-     * Método llamado por Shizuku para destruir el servicio.
-     * Transaction code 16777115 según documentación de Shizuku.
+     * Shizuku llama a este método (transacción 16777115) cuando el servicio debe morir.
+     * El proceso no se detiene solo, hay que salir explícitamente.
      */
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d("ShellUserService", "ShellUserService destroyed")
+    override fun destroy() {
+        Log.d(TAG, "destroy")
         System.exit(0)
     }
 
-    companion object {
-        private const val TAG = "ShellUserService"
+    private companion object {
+        const val TAG = "ShellUserService"
     }
 }
