@@ -8,6 +8,11 @@ data class ManagedPermission(
 
 val managedPermissions: List<ManagedPermission> = listOf(
     ManagedPermission(
+        name = "WRITE_SECURE_SETTINGS",
+        title = "Modificar Ajustes Seguros",
+        description = "Permite cambiar ajustes protegidos del sistema, como los servicios de accesibilidad y el acceso a notificaciones. Se concede con ADB una sola vez. Con este permiso la app puede activar o desactivar esos servicios."
+    ),
+    ManagedPermission(
         name = "CAMERA",
         title = "Cámara",
         description = "Permite a una app usar la cámara. Desde esta app puedes concederlo o revocarlo para cada aplicación instalada. Al cambiarlo, el efecto es inmediato."
