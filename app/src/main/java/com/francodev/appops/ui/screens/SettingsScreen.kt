@@ -106,11 +106,33 @@ private fun WorkModeScreen(store: SettingsStore, onBack: () -> Unit) {
     var shizukuStatus by remember { mutableStateOf(ShizukuShell.status()) }
 
     DisposableEffect(Unit) {
-        val listener = Shizuku.OnRequestPermissionResultListener { _, _ ->
+        val permissionListener = Shizuku.OnRequestPermissionResultListener { _, _ ->
             shizukuStatus = ShizukuShell.status()
         }
-        Shizuku.addRequestPermissionResultListener(listener)
-        onDispose { Shizuku.removeRequestPermissionResultListener(listener) }
+        val binderReceivedListener = Shizuku.OnBinderReceivedListener {
+            shizukuStatus = ShizukuShell.status()
+            if (shizukuStatus == ShizukuStatus.NO_PERMISSION) {
+                ShizukuShell.requestPermission()
+            }
+        }
+        val binderDeadListener = Shizuku.OnBinderDeadListener {
+            shizukuStatus = ShizukuShell.status()
+        }
+
+        Shizuku.addRequestPermissionResultListener(permissionListener)
+        Shizuku.addBinderReceivedListener(binderReceivedListener)
+        Shizuku.addBinderDeadListener(binderDeadListener)
+
+        // Si Shizuku ya está activo, pedimos permiso al entrar para que la app aparezca en Shizuku.
+        if (shizukuStatus == ShizukuStatus.NO_PERMISSION) {
+            ShizukuShell.requestPermission()
+        }
+
+        onDispose {
+            Shizuku.removeRequestPermissionResultListener(permissionListener)
+            Shizuku.removeBinderReceivedListener(binderReceivedListener)
+            Shizuku.removeBinderDeadListener(binderDeadListener)
+        }
     }
 
     Scaffold(
@@ -140,6 +162,9 @@ private fun WorkModeScreen(store: SettingsStore, onBack: () -> Unit) {
                         selected = mode
                         store.setWorkMode(mode)
                         shizukuStatus = ShizukuShell.status()
+                        if (mode == WorkMode.SHIZUKU && shizukuStatus == ShizukuStatus.NO_PERMISSION) {
+                            ShizukuShell.requestPermission()
+                        }
                     }
                 )
             }
@@ -207,7 +232,7 @@ private fun ShizukuStatusCard(status: ShizukuStatus, onRequest: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = when (status) {
-                    ShizukuStatus.NOT_RUNNING -> "Shizuku no está en ejecución. Ábrelo y actívalo, y vuelve a esta pantalla."
+                    ShizukuStatus.NOT_RUNNING -> "Shizuku no está conectado. Abre Shizuku, inícialo y vuelve a esta pantalla."
                     ShizukuStatus.NO_PERMISSION -> "Shizuku está activo, pero esta app todavía no tiene permiso."
                     ShizukuStatus.READY -> "Shizuku está listo para ejecutar comandos."
                 },
