@@ -10,6 +10,7 @@ import com.francodev.appops.ui.theme.AppOpsTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ShizukuShell.setContext(this)
         ShizukuShell.init(this)
         setContent {
             AppOpsTheme {
