@@ -8,5 +8,5 @@ interface IShellService {
     // Código de transacción fijo que usa el servidor de Shizuku para destruir el UserService.
     void destroy() = 16777114;
 
-    ShellResult executeCommand(in String[] command);
+    ShellResult executeCommand(in String[] command) = 1;
 }
