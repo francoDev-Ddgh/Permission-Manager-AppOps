@@ -3,6 +3,7 @@ package com.francodev.appops.data
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import com.francodev.appops.shell.ShizukuShell
 import com.francodev.appops.shell.ShizukuStatus
 import com.francodev.appops.shell.ShellResult
@@ -54,6 +55,15 @@ private fun strategyOf(permission: ManagedPermission): Strategy = when (permissi
     "INTERNET" -> Strategy.NETWORK
     "WRITE_SECURE_SETTINGS" -> Strategy.PERMISSION
     "BIND_ACCESSIBILITY_SERVICE", "BIND_NOTIFICATION_LISTENER_SERVICE" -> Strategy.SETTINGS
+    // Desde Android 13 las notificaciones son un permiso de ejecución. `pm grant`
+    // lo cambia y el sistema sincroniza el app op por su cuenta, así que Ajustes
+    // queda igual que aquí. Antes de esa versión solo existía el app op.
+    "POST_NOTIFICATIONS" ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Strategy.PERMISSION
+        } else {
+            Strategy.APPOPS
+        }
     else -> Strategy.APPOPS
 }
 
