@@ -48,6 +48,7 @@ import com.francodev.appops.data.setPermissionState
 import com.francodev.appops.shell.ShizukuShell
 import com.francodev.appops.shell.ShizukuStatus
 import com.francodev.appops.ui.components.AppIcon
+import com.francodev.appops.ui.components.ShizukuNotice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,7 +73,7 @@ fun AppDetailScreen(
         ShizukuShell.status() == ShizukuStatus.READY
     }
 
-    LaunchedEffect(packageName, reloadKey) {
+    LaunchedEffect(packageName) {
         label = withContext(Dispatchers.IO) {
             runCatching {
                 context.packageManager
@@ -80,6 +81,9 @@ fun AppDetailScreen(
                     .toString()
             }.getOrDefault(packageName)
         }
+    }
+
+    LaunchedEffect(packageName, reloadKey) {
         entries = loadPermissionsForApp(context, packageName)
     }
 
@@ -242,29 +246,6 @@ private fun PermissionToggleRow(
                 checked = entry.active,
                 onCheckedChange = onChange,
                 enabled = enabled
-            )
-        }
-    }
-}
-
-@Composable
-private fun ShizukuNotice() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Shizuku no está conectado",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Sin Shizuku no se pueden leer ni cambiar los estados. " +
-                    "Actívalo en Ajustes › Modo de Trabajo.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

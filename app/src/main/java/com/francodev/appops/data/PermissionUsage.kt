@@ -88,7 +88,7 @@ suspend fun loadAppsUsingPermission(
 
     candidates.map { app ->
         val active = if (enabled != null) {
-            enabled.any { it.startsWith("${app.packageName}/") }
+            enabled.containsPackage(app.packageName)
         } else {
             readState(context, app.packageName, permission)
         }
@@ -126,7 +126,7 @@ suspend fun loadPermissionsForApp(
 
         val enabled = enabledComponentsFor(permission)
         val active = if (enabled != null) {
-            enabled.any { it.startsWith("$packageName/") }
+            enabled.containsPackage(packageName)
         } else {
             readState(context, packageName, permission)
         }
@@ -183,6 +183,9 @@ private fun pipCapableApps(context: Context): List<UserApp> {
 /**
  * Para accesibilidad y acceso a notificaciones el estado vive en Settings.Secure.
  */
+private fun Set<String>.containsPackage(packageName: String): Boolean =
+    any { it.startsWith("$packageName/") }
+
 private fun enabledComponentsFor(permission: ManagedPermission): Set<String>? =
     when (permission.name) {
         "BIND_ACCESSIBILITY_SERVICE" -> enabledComponents("enabled_accessibility_services")

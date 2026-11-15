@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
-import android.os.RemoteException
 import android.util.Log
 import com.francodev.appops.data.SettingsStore
 import com.francodev.appops.data.WorkMode
@@ -45,7 +44,7 @@ object ShizukuShell {
     /**
      * Guarda el contexto de la aplicación, necesario para vincular el UserService.
      */
-    fun setContext(context: Context) {
+    private fun setContext(context: Context) {
         appContext = context.applicationContext
     }
 
@@ -135,11 +134,6 @@ object ShizukuShell {
     }
 
     /**
-     * true si el método legacy newProcess existe (Shizuku < 13.1.5).
-     */
-    fun isLegacyNewProcessAvailable(): Boolean = getNewProcessMethod() != null
-
-    /**
      * Versión de Shizuku instalada, o null si no se puede determinar.
      */
     fun getShizukuVersion(): Int? = runCatching { Shizuku.getVersion() }.getOrNull()
@@ -189,12 +183,9 @@ object ShizukuShell {
 
         return try {
             shellService?.executeCommand(command) ?: runLegacy(*command)
-        } catch (e: RemoteException) {
+        } catch (e: Exception) {
             Log.e(TAG, "UserService call failed, falling back to legacy", e)
             shellService = null
-            runLegacy(*command)
-        } catch (e: Exception) {
-            Log.e(TAG, "Unexpected error calling UserService", e)
             runLegacy(*command)
         }
     }

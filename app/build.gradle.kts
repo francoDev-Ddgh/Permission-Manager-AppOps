@@ -52,6 +52,30 @@ android {
         compose = true
         aidl = true
     }
+
+    androidResources {
+        // La app solo está en español; se descartan las traducciones de AndroidX
+        // para el resto de idiomas.
+        localeFilters += listOf("es")
+    }
+
+    packaging {
+        resources {
+            // Metadatos que ninguna librería necesita en tiempo de ejecución.
+            excludes += setOf(
+                "META-INF/*.version",
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+                "DebugProbesKt.bin",
+                "kotlin-tooling-metadata.json"
+            )
+        }
+    }
+
+    dependenciesInfo {
+        includeInApk = false
+    }
 }
 
 kotlin {
@@ -65,10 +89,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     debugImplementation("androidx.compose.ui:ui-tooling")

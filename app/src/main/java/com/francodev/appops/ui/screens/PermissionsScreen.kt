@@ -18,8 +18,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,11 +26,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.francodev.appops.data.ManagedPermission
 import com.francodev.appops.data.managedPermissions
+import com.francodev.appops.ui.components.SearchField
 
 @Composable
 fun PermissionsScreen(modifier: Modifier = Modifier) {
@@ -89,19 +87,10 @@ fun PermissionsScreen(modifier: Modifier = Modifier) {
 
         if (showSearch) {
             item {
-                TextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("Buscar permisos") },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent
-                    )
+                SearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = "Buscar permisos"
                 )
             }
         }
