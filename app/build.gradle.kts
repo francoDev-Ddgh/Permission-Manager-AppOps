@@ -15,6 +15,8 @@ android {
         val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+        // La app solo está en español; se descartan las traducciones de AndroidX.
+        resourceConfigurations += listOf("es")
     }
 
     signingConfigs {
@@ -51,12 +53,6 @@ android {
     buildFeatures {
         compose = true
         aidl = true
-    }
-
-    androidResources {
-        // La app solo está en español; se descartan las traducciones de AndroidX
-        // para el resto de idiomas.
-        localeFilters += listOf("es")
     }
 
     packaging {
