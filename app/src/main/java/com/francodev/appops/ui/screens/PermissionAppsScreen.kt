@@ -20,13 +20,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,15 +40,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.francodev.appops.data.AppPermissionState
 import com.francodev.appops.data.ManagedPermission
+import com.francodev.appops.data.canTogglePermission
 import com.francodev.appops.data.loadAppsUsingPermission
+import com.francodev.appops.data.setPermissionState
 import com.francodev.appops.shell.ShizukuShell
 import com.francodev.appops.shell.ShizukuStatus
 import com.francodev.appops.ui.components.AppRow
-
-private sealed interface UsageState {
-    data object Loading : UsageState
-    data class Ready(val apps: List<AppPermissionState>) : UsageState
-}
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,16 +56,46 @@ fun PermissionAppsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val usage by produceState<UsageState>(UsageState.Loading, permission) {
-        value = UsageState.Loading
-        value = UsageState.Ready(loadAppsUsingPermission(context, permission))
-    }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // null = todavía cargando
+    var apps by remember(permission) { mutableStateOf<List<AppPermissionState>?>(null) }
+    var pending by remember(permission) { mutableStateOf<Set<String>>(emptySet()) }
     val shizukuReady = remember(permission) { ShizukuShell.status() == ShizukuStatus.READY }
+    val canToggle = remember(permission) { canTogglePermission(permission) }
+
+    LaunchedEffect(permission) {
+        apps = loadAppsUsingPermission(context, permission)
+    }
+
+    fun changeState(entry: AppPermissionState, target: Boolean) {
+        if (entry.app.packageName in pending) return
+        pending = pending + entry.app.packageName
+        scope.launch {
+            val ok = setPermissionState(entry.app.packageName, permission, target)
+            if (ok) {
+                apps = apps?.map {
+                    if (it.app.packageName == entry.app.packageName) it.copy(active = target) else it
+                }
+            } else {
+                snackbarHostState.showSnackbar(
+                    if (canToggle) {
+                        "No se pudo cambiar el permiso. Revisa que Shizuku tenga permiso."
+                    } else {
+                        "Este permiso solo se puede cambiar desde Ajustes del sistema."
+                    }
+                )
+            }
+            pending = pending - entry.app.packageName
+        }
+    }
 
     BackHandler(onBack = onBack)
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(permission.title) },
@@ -101,8 +135,9 @@ fun PermissionAppsScreen(
                 item { ShizukuNotice() }
             }
 
-            when (val state = usage) {
-                UsageState.Loading -> item {
+            val current = apps
+            when {
+                current == null -> item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -113,41 +148,30 @@ fun PermissionAppsScreen(
                     }
                 }
 
-                is UsageState.Ready -> {
-                    if (state.apps.isEmpty()) {
-                        item {
-                            Text(
-                                text = "Ninguna app instalada declara este permiso.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 16.dp)
+                current.isEmpty() -> item {
+                    Text(
+                        text = "Ninguna app instalada declara este permiso.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                }
+
+                else -> items(current, key = { it.app.packageName }) { entry ->
+                    AppRow(
+                        app = entry.app,
+                        trailing = {
+                            Switch(
+                                checked = entry.active,
+                                onCheckedChange = { target -> changeState(entry, target) },
+                                enabled = canToggle && entry.app.packageName !in pending
                             )
                         }
-                    } else {
-                        items(state.apps, key = { it.app.packageName }) { entry ->
-                            AppRow(
-                                app = entry.app,
-                                trailing = { StatusLabel(active = entry.active) }
-                            )
-                        }
-                    }
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun StatusLabel(active: Boolean) {
-    Text(
-        text = if (active) "Activo" else "Inactivo",
-        style = MaterialTheme.typography.labelLarge,
-        color = if (active) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    )
 }
 
 @Composable
@@ -164,8 +188,8 @@ private fun ShizukuNotice() {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Sin Shizuku el estado se toma del permiso concedido y puede no reflejar " +
-                    "los bloqueos hechos con app ops. Actívalo en Ajustes › Modo de Trabajo.",
+                text = "Sin Shizuku no se pueden leer ni cambiar los estados. " +
+                    "Actívalo en Ajustes › Modo de Trabajo.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

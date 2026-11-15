@@ -101,3 +101,30 @@ private fun appOpsName(permission: String): String = when (permission) {
     "POST_NOTIFICATIONS" -> "POST_NOTIFICATION"
     else -> permission
 }
+
+/**
+ * Accesibilidad y acceso a notificaciones no son app ops: se activan desde Ajustes del
+ * sistema, así que de momento no se pueden cambiar desde aquí.
+ */
+fun canTogglePermission(permission: ManagedPermission): Boolean =
+    permission.name != "BIND_ACCESSIBILITY_SERVICE" &&
+        permission.name != "BIND_NOTIFICATION_LISTENER_SERVICE"
+
+/**
+ * Concede o revoca el permiso para una app usando `appops set`.
+ *
+ * @return true si el comando terminó correctamente.
+ */
+suspend fun setPermissionState(
+    packageName: String,
+    permission: ManagedPermission,
+    active: Boolean
+): Boolean = withContext(Dispatchers.IO) {
+    if (!canTogglePermission(permission)) return@withContext false
+
+    val mode = if (active) "allow" else "ignore"
+    val result = ShizukuShell.run(
+        "appops", "set", packageName, appOpsName(permission.name), mode
+    )
+    result.ok
+}
