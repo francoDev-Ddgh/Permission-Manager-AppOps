@@ -8,11 +8,6 @@ data class ManagedPermission(
 
 val managedPermissions: List<ManagedPermission> = listOf(
     ManagedPermission(
-        name = "WRITE_SECURE_SETTINGS",
-        title = "Modificar Ajustes Seguros",
-        description = "Permite cambiar ajustes protegidos del sistema. La app lo usa para activar o desactivar los servicios de accesibilidad y el acceso a notificaciones. Android no lo concede desde la pantalla normal, así que hay que darlo por ADB o con root."
-    ),
-    ManagedPermission(
         name = "CAMERA",
         title = "Cámara",
         description = "Permite a una app usar la cámara. Desde esta app puedes concederlo o revocarlo para cada aplicación instalada. Al cambiarlo, el efecto es inmediato."
@@ -26,11 +21,6 @@ val managedPermissions: List<ManagedPermission> = listOf(
         name = "BLUETOOTH_SCAN",
         title = "Buscar dispositivos Bluetooth",
         description = "Permite buscar dispositivos Bluetooth cercanos. Algunas apps lo necesitan para encontrar accesorios nuevos. Desde esta app puedes controlarlo por aplicación."
-    ),
-    ManagedPermission(
-        name = "CHANGE_WIFI_STATE",
-        title = "Cambiar estado del Wi-Fi",
-        description = "Permite a una app encender o apagar el Wi-Fi. Desde Android 10 esta capacidad está muy restringida, así que el resultado depende de la versión del sistema y del fabricante."
     ),
     ManagedPermission(
         name = "READ_MEDIA_IMAGES",
