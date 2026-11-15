@@ -29,8 +29,15 @@ import com.francodev.appops.data.UserApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Fila de app: icono y nombre a la izquierda y, opcionalmente, contenido a la derecha.
+ */
 @Composable
-fun AppRow(app: UserApp, modifier: Modifier = Modifier) {
+fun AppRow(
+    app: UserApp,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -59,6 +66,10 @@ fun AppRow(app: UserApp, modifier: Modifier = Modifier) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            trailing?.let {
+                Spacer(Modifier.width(12.dp))
+                it()
             }
         }
     }

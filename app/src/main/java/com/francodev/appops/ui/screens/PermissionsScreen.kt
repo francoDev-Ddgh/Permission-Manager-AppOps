@@ -24,8 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,6 +38,17 @@ import com.francodev.appops.data.managedPermissions
 fun PermissionsScreen(modifier: Modifier = Modifier) {
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var selectedIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    val selected = selectedIndex?.let { managedPermissions.getOrNull(it) }
+    if (selected != null) {
+        PermissionAppsScreen(
+            permission = selected,
+            onBack = { selectedIndex = null },
+            modifier = modifier
+        )
+        return
+    }
 
     val visiblePermissions = remember(query) {
         val q = query.trim()
@@ -106,14 +117,18 @@ fun PermissionsScreen(modifier: Modifier = Modifier) {
         }
 
         items(visiblePermissions, key = { it.name }) { permission ->
-            PermissionCard(permission = permission)
+            PermissionCard(
+                permission = permission,
+                onClick = { selectedIndex = managedPermissions.indexOf(permission) }
+            )
         }
     }
 }
 
 @Composable
-private fun PermissionCard(permission: ManagedPermission) {
+private fun PermissionCard(permission: ManagedPermission, onClick: () -> Unit) {
     Surface(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer
