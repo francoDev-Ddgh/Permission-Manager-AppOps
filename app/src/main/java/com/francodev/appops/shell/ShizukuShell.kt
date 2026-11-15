@@ -22,12 +22,14 @@ object ShizukuShell {
         ShizukuStatus.NOT_RUNNING
     }
 
+    // Shizuku solo muestra la app en su lista cuando la app pide permiso al menos una vez.
+    // Si Shizuku no está conectado todavía, la llamada falla y se ignora.
     fun requestPermission() {
-        Shizuku.requestPermission(REQUEST_CODE)
+        runCatching { Shizuku.requestPermission(REQUEST_CODE) }
     }
 
     // Ejecuta un comando con privilegios de shell (ADB) a través de Shizuku.
-    // Shizuku.newProcess es interno; se llama por reflexión igual que en otras apps.
+    // Shizuku.newProcess es interno; se llama por reflexión.
     fun run(vararg command: String): ShellResult {
         val process = try {
             val method = Shizuku::class.java.getDeclaredMethod(
