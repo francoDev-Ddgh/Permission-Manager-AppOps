@@ -240,7 +240,21 @@ suspend fun setPermissionState(
             val result = ShizukuShell.run(
                 "appops", "set", packageName, appOpsName(permission.name), mode
             )
-            result.toToggleResult()
+            if (result.ok || permission.name != "SMS_PREMIUM") {
+                return@withContext result.toToggleResult()
+            }
+
+            // Muchas ROMs no traen el app op SMS_PREMIUM. El envío de SMS es lo más
+            // cercano que existe, así que se controla con SEND_SMS.
+            val fallback = ShizukuShell.run("appops", "set", packageName, "SEND_SMS", mode)
+            if (fallback.ok) {
+                ToggleResult(
+                    success = true,
+                    message = "Esta ROM no tiene app op de SMS Premium; el cambio se aplicó al envío de SMS."
+                )
+            } else {
+                fallback.toToggleResult()
+            }
         }
 
         Strategy.PERMISSION -> {

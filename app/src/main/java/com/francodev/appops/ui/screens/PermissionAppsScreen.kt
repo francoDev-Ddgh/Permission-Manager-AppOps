@@ -78,6 +78,7 @@ fun PermissionAppsScreen(
                 apps = apps?.map {
                     if (it.app.packageName == entry.app.packageName) it.copy(active = target) else it
                 }
+                result.message?.let { snackbarHostState.showSnackbar(it) }
             } else {
                 snackbarHostState.showSnackbar(
                     result.message ?: "No se pudo cambiar el permiso."
