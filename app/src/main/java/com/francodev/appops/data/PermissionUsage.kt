@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.francodev.appops.shell.ShizukuShell
+import com.francodev.appops.shell.ShizukuStatus
 import com.francodev.appops.shell.ShellResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,6 +14,14 @@ import kotlinx.coroutines.withContext
  */
 data class AppPermissionState(
     val app: UserApp,
+    val active: Boolean
+)
+
+/**
+ * Permiso del catálogo que usa una app concreta, con su estado.
+ */
+data class AppPermissionEntry(
+    val permission: ManagedPermission,
     val active: Boolean
 )
 
@@ -51,6 +60,8 @@ private fun strategyOf(permission: ManagedPermission): Strategy = when (permissi
 fun canTogglePermission(permission: ManagedPermission): Boolean =
     strategyOf(permission) != Strategy.SETTINGS
 
+private const val FLAG_SUPPORTS_PICTURE_IN_PICTURE = 0x400000
+
 /**
  * Devuelve las apps instaladas que declaran el permiso indicado y si lo tienen activo.
  */
@@ -63,8 +74,6 @@ suspend fun loadAppsUsingPermission(
         PermissionSource.PERMISSION -> appsDeclaring(context, permission)
     }
 
-    // Estos dos permisos se conceden desde Ajustes y se leen de Settings.Secure,
-    // así que se resuelven con una sola consulta en lugar de una por app.
     val enabled = enabledComponentsFor(permission)
 
     candidates.map { app ->
@@ -76,14 +85,6 @@ suspend fun loadAppsUsingPermission(
         AppPermissionState(app = app, active = active)
     }
 }
-
-/**
- * Permiso del catálogo que usa una app concreta, con su estado.
- */
-data class AppPermissionEntry(
-    val permission: ManagedPermission,
-    val active: Boolean
-)
 
 /**
  * Permisos administrables que usa una app, listos para mostrar con un interruptor.
@@ -124,16 +125,6 @@ suspend fun loadPermissionsForApp(
 }
 
 /**
- * Para accesibilidad y acceso a notificaciones el estado vive en Settings.Secure.
- */
-private fun enabledComponentsFor(permission: ManagedPermission): Set<String>? =
-    when (permission.name) {
-        "BIND_ACCESSIBILITY_SERVICE" -> enabledComponents("enabled_accessibility_services")
-        "BIND_NOTIFICATION_LISTENER_SERVICE" -> enabledComponents("enabled_notification_listeners")
-        else -> null
-    }
-
-/**
  * Apps que declaran el permiso en su manifiesto.
  */
 private fun appsDeclaring(context: Context, permission: ManagedPermission): List<UserApp> {
@@ -156,10 +147,8 @@ private fun appsDeclaring(context: Context, permission: ManagedPermission): List
 
 /**
  * Apps con alguna actividad marcada con `android:supportsPictureInPicture="true"`.
- * La imagen en imagen no tiene permiso en el manifiesto, se declara por actividad.
- *
- * El flag es 0x400000 (ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE), pero esa
- * constante no está expuesta en los stubs públicos del SDK.
+ * El flag es 0x400000 (ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE), que no está
+ * expuesto en los stubs públicos del SDK.
  */
 private fun pipCapableApps(context: Context): List<UserApp> {
     val pm = context.packageManager
@@ -181,7 +170,15 @@ private fun pipCapableApps(context: Context): List<UserApp> {
         .toList()
 }
 
-private const val FLAG_SUPPORTS_PICTURE_IN_PICTURE = 0x400000
+/**
+ * Para accesibilidad y acceso a notificaciones el estado vive en Settings.Secure.
+ */
+private fun enabledComponentsFor(permission: ManagedPermission): Set<String>? =
+    when (permission.name) {
+        "BIND_ACCESSIBILITY_SERVICE" -> enabledComponents("enabled_accessibility_services")
+        "BIND_NOTIFICATION_LISTENER_SERVICE" -> enabledComponents("enabled_notification_listeners")
+        else -> null
+    }
 
 private fun readState(
     context: Context,
@@ -239,16 +236,32 @@ private fun readAppOpsState(
 }
 
 /**
- * null cuando el app op no existe o no tiene un modo explícito.
+ * Interpreta la salida de `appops get <paquete> <op>` buscando SOLO la línea de esa
+ * operación. Algunas ROMs imprimen una lista completa cuando no conocen el nombre,
+ * y mirar todo el texto daba falsos negativos.
+ *
+ * Modos posibles: allow, foreground, default, ignore, deny, erase.
+ * Devuelve null si no hay un modo interpretable.
  */
 private fun readOpMode(packageName: String, op: String): Boolean? {
     val result = ShizukuShell.run("appops", "get", packageName, op)
     if (!result.ok) return null
 
-    val output = result.stdout.lowercase()
-    if ("ignore" in output || "deny" in output) return false
-    if ("allow" in output) return true
-    return null
+    val line = result.stdout.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .firstOrNull { it.substringBefore(':').trim().equals(op, ignoreCase = true) }
+        ?: return null
+
+    val mode = line.substringAfter(':').substringBefore(';').trim().lowercase()
+    return when {
+        mode.startsWith("allow") -> true
+        mode.startsWith("foreground") -> true
+        mode.startsWith("ignore") -> false
+        mode.startsWith("deny") -> false
+        mode.startsWith("erase") -> false
+        else -> null
+    }
 }
 
 /**
@@ -275,72 +288,115 @@ private fun readNetworkState(
 
 /**
  * Concede o revoca el permiso para una app.
+ *
+ * Antes de ejecutar comprueba que Shizuku esté listo. Después vuelve a leer el estado
+ * y, si el sistema no refleja el cambio, devuelve error para que la UI no muestre un
+ * valor falso.
  */
 suspend fun setPermissionState(
+    context: Context,
     packageName: String,
     permission: ManagedPermission,
     active: Boolean
 ): ToggleResult = withContext(Dispatchers.IO) {
-    when (strategyOf(permission)) {
-        Strategy.SETTINGS -> ToggleResult(
+    val strategy = strategyOf(permission)
+
+    if (strategy == Strategy.SETTINGS) {
+        return@withContext ToggleResult(
             success = false,
             message = "Este permiso solo se puede cambiar desde Ajustes del sistema."
         )
+    }
 
-        Strategy.APPOPS -> {
-            val mode = if (active) "allow" else "ignore"
-            val result = ShizukuShell.run(
-                "appops", "set", packageName, appOpsName(permission.name), mode
-            )
-            if (result.ok || permission.name != "SMS_PREMIUM") {
-                return@withContext result.toToggleResult()
-            }
+    if (ShizukuShell.status() != ShizukuStatus.READY) {
+        return@withContext ToggleResult(
+            success = false,
+            message = "Shizuku no está conectado o la app no tiene permiso."
+        )
+    }
 
-            // Muchas ROMs no traen el app op SMS_PREMIUM. El envío de SMS es lo más
-            // cercano que existe, así que se controla con SEND_SMS.
-            val fallback = ShizukuShell.run("appops", "set", packageName, "SEND_SMS", mode)
-            if (fallback.ok) {
-                ToggleResult(
-                    success = true,
-                    message = "Esta ROM no tiene app op de SMS Premium; el cambio se aplicó al envío de SMS."
-                )
-            } else {
-                fallback.toToggleResult()
-            }
-        }
-
+    val outcome = when (strategy) {
+        Strategy.APPOPS -> runAppOpsSet(packageName, permission, active)
         Strategy.PERMISSION -> {
             val declared = permission.manifestPermission ?: permission.name
             val action = if (active) "grant" else "revoke"
-            val result = ShizukuShell.run(
-                "pm", action, packageName, "android.permission.$declared"
+            SetOutcome(
+                ShizukuShell.run("pm", action, packageName, "android.permission.$declared")
             )
-            result.toToggleResult()
         }
-
         Strategy.NETWORK -> {
             // La cadena de firewall debe estar activa para que la regla haga efecto.
             if (!active) {
                 ShizukuShell.run("cmd", "connectivity", "set-chain3-enabled", "true")
             }
-            val result = ShizukuShell.run(
-                "cmd", "connectivity", "set-package-networking-enabled",
-                active.toString(), packageName
+            SetOutcome(
+                ShizukuShell.run(
+                    "cmd", "connectivity", "set-package-networking-enabled",
+                    active.toString(), packageName
+                )
             )
-            result.toToggleResult()
         }
+        Strategy.SETTINGS -> return@withContext ToggleResult(false)
     }
-}
 
-private fun ShellResult.toToggleResult(): ToggleResult =
-    if (ok) {
-        ToggleResult(success = true)
-    } else {
-        ToggleResult(
+    val result = outcome.result
+
+    if (!result.ok) {
+        return@withContext ToggleResult(
             success = false,
-            message = stderr.ifBlank { stdout }.ifBlank { "El comando falló." }
+            message = "El comando falló: ${result.describe()}"
         )
     }
+
+    // El firewall por app no se puede leer de forma fiable en todas las versiones,
+    // así que solo se verifica app ops y permisos.
+    if (strategy == Strategy.APPOPS || strategy == Strategy.PERMISSION) {
+        val now = readState(context, packageName, permission)
+        if (now != active) {
+            return@withContext ToggleResult(
+                success = false,
+                message = "El sistema no aplicó el cambio: sigue " +
+                    "${if (now) "activo" else "inactivo"}. ${result.describe()}"
+            )
+        }
+    }
+
+    ToggleResult(
+        success = true,
+        message = if (outcome.usedFallback) {
+            "Esta ROM no tiene app op de SMS Premium; el cambio se aplicó al envío de SMS."
+        } else {
+            null
+        }
+    )
+}
+
+private data class SetOutcome(val result: ShellResult, val usedFallback: Boolean = false)
+
+private fun runAppOpsSet(
+    packageName: String,
+    permission: ManagedPermission,
+    active: Boolean
+): SetOutcome {
+    val mode = if (active) "allow" else "ignore"
+    val primary = ShizukuShell.run(
+        "appops", "set", packageName, appOpsName(permission.name), mode
+    )
+    if (primary.ok || permission.name != "SMS_PREMIUM") return SetOutcome(primary)
+
+    // Muchas ROMs no traen el app op SMS_PREMIUM. El envío de SMS es lo más
+    // cercano que existe, así que se controla con SEND_SMS.
+    val fallback = ShizukuShell.run("appops", "set", packageName, "SEND_SMS", mode)
+    return SetOutcome(fallback, usedFallback = fallback.ok)
+}
+
+private fun ShellResult.describe(): String {
+    val text = listOf(stderr, stdout)
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .trim()
+    return text.ifBlank { "sin salida del comando" }
+}
 
 /**
  * El nombre del app op no siempre coincide con el del permiso.

@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -62,10 +63,13 @@ fun PermissionAppsScreen(
     // null = todavía cargando
     var apps by remember(permission) { mutableStateOf<List<AppPermissionState>?>(null) }
     var pending by remember(permission) { mutableStateOf<Set<String>>(emptySet()) }
-    val shizukuReady = remember(permission) { ShizukuShell.status() == ShizukuStatus.READY }
+    var reloadKey by remember(permission) { mutableStateOf(0) }
+    val shizukuReady = remember(permission, reloadKey) {
+        ShizukuShell.status() == ShizukuStatus.READY
+    }
     val canToggle = remember(permission) { canTogglePermission(permission) }
 
-    LaunchedEffect(permission) {
+    LaunchedEffect(permission, reloadKey) {
         apps = loadAppsUsingPermission(context, permission)
     }
 
@@ -73,7 +77,7 @@ fun PermissionAppsScreen(
         if (entry.app.packageName in pending) return
         pending = pending + entry.app.packageName
         scope.launch {
-            val result = setPermissionState(entry.app.packageName, permission, target)
+            val result = setPermissionState(context, entry.app.packageName, permission, target)
             if (result.success) {
                 apps = apps?.map {
                     if (it.app.packageName == entry.app.packageName) it.copy(active = target) else it
@@ -99,6 +103,11 @@ fun PermissionAppsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { reloadKey++ }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Recargar estados")
                     }
                 }
             )

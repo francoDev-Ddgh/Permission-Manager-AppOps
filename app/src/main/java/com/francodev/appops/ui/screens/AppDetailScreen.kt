@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -66,9 +67,12 @@ fun AppDetailScreen(
     // null = cargando
     var entries by remember(packageName) { mutableStateOf<List<AppPermissionEntry>?>(null) }
     var pending by remember(packageName) { mutableStateOf<Set<String>>(emptySet()) }
-    val shizukuReady = remember(packageName) { ShizukuShell.status() == ShizukuStatus.READY }
+    var reloadKey by remember(packageName) { mutableStateOf(0) }
+    val shizukuReady = remember(packageName, reloadKey) {
+        ShizukuShell.status() == ShizukuStatus.READY
+    }
 
-    LaunchedEffect(packageName) {
+    LaunchedEffect(packageName, reloadKey) {
         label = withContext(Dispatchers.IO) {
             runCatching {
                 context.packageManager
@@ -84,7 +88,7 @@ fun AppDetailScreen(
         if (key in pending) return
         pending = pending + key
         scope.launch {
-            val result = setPermissionState(packageName, entry.permission, target)
+            val result = setPermissionState(context, packageName, entry.permission, target)
             if (result.success) {
                 entries = entries?.map {
                     if (it.permission.name == key) it.copy(active = target) else it
@@ -112,6 +116,11 @@ fun AppDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { reloadKey++ }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Recargar estados")
                     }
                 }
             )
