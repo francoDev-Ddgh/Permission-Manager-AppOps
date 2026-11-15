@@ -1,9 +1,23 @@
 package com.francodev.appops.data
 
+/**
+ * Cómo se decide qué apps "usan" un permiso.
+ */
+enum class PermissionSource {
+    /** Apps que declaran [ManagedPermission.manifestPermission] en el manifiesto. */
+    PERMISSION,
+
+    /** Apps con alguna actividad que soporta imagen en imagen. */
+    PIP_ACTIVITY
+}
+
 data class ManagedPermission(
     val name: String,
     val title: String,
-    val description: String
+    val description: String,
+    /** Permiso del manifiesto con el que se filtran las apps. null si no aplica. */
+    val manifestPermission: String? = name,
+    val source: PermissionSource = PermissionSource.PERMISSION
 )
 
 val managedPermissions: List<ManagedPermission> = listOf(
@@ -55,11 +69,13 @@ val managedPermissions: List<ManagedPermission> = listOf(
     ManagedPermission(
         name = "PICTURE_IN_PICTURE",
         title = "Imagen en imagen",
-        description = "Permite mostrar una ventana flotante mientras usas otra app, por ejemplo para ver un video. Es un permiso especial del sistema y no aparece en la lista normal de permisos."
+        description = "Permite mostrar una ventana flotante mientras usas otra app, por ejemplo para ver un video. No es un permiso del manifiesto: se detecta por las actividades que declaran soporte de imagen en imagen.",
+        manifestPermission = null,
+        source = PermissionSource.PIP_ACTIVITY
     ),
     ManagedPermission(
         name = "SYSTEM_ALERT_WINDOW",
-        title = "Mostrar sobre otras apps",
+        title = "Mostrar sobre otras aplicaciones",
         description = "Permite dibujar ventanas o burbujas encima de otras aplicaciones. Muchas apps lo usan para chats flotantes o herramientas rápidas. Puede usarse para tapar contenido, así que conviene revisarlo."
     ),
     ManagedPermission(
@@ -76,6 +92,12 @@ val managedPermissions: List<ManagedPermission> = listOf(
         name = "POST_NOTIFICATIONS",
         title = "Mostrar notificaciones",
         description = "Permite que la app muestre notificaciones en la barra de estado. Sin este permiso la app puede funcionar, pero no te avisará de nada. Desde Android 13 es un permiso de ejecución."
+    ),
+    ManagedPermission(
+        name = "SMS_PREMIUM",
+        title = "SMS Premium",
+        description = "Permite enviar mensajes a números de tarificación especial, que se cobran aparte en tu factura. Muy pocas apps lo necesitan de verdad. En ROMs que no exponen este app op se usa el estado de envío de SMS.",
+        manifestPermission = "SEND_SMS"
     ),
     ManagedPermission(
         name = "INTERNET",

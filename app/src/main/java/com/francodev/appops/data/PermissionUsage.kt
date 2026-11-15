@@ -1,6 +1,7 @@
 package com.francodev.appops.data
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.francodev.appops.shell.ShizukuShell
@@ -53,27 +54,15 @@ fun canTogglePermission(permission: ManagedPermission): Boolean =
 
 /**
  * Devuelve las apps instaladas que declaran el permiso indicado y si lo tienen activo.
- *
- * Las candidatas salen del manifiesto, así que no hace falta Shizuku para listarlas.
  */
 suspend fun loadAppsUsingPermission(
     context: Context,
     permission: ManagedPermission
 ): List<AppPermissionState> = withContext(Dispatchers.IO) {
-    val pm = context.packageManager
-    val fullPermission = "android.permission.${permission.name}"
-
-    val candidates = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
-        .asSequence()
-        .mapNotNull { pkg -> pkg.applicationInfo?.let { pkg to it } }
-        .filter { (_, info) -> (info.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
-        .filter { (pkg, _) -> pkg.packageName != context.packageName }
-        .filter { (pkg, _) -> pkg.requestedPermissions?.contains(fullPermission) == true }
-        .map { (pkg, info) ->
-            UserApp(packageName = pkg.packageName, label = pm.getApplicationLabel(info).toString())
-        }
-        .sortedBy { it.label.lowercase() }
-        .toList()
+    val candidates = when (permission.source) {
+        PermissionSource.PIP_ACTIVITY -> pipCapableApps(context)
+        PermissionSource.PERMISSION -> appsDeclaring(context, permission)
+    }
 
     // Estos dos permisos se conceden desde Ajustes y se leen de Settings.Secure,
     // así que se resuelven con una sola consulta en lugar de una por app.
@@ -91,6 +80,51 @@ suspend fun loadAppsUsingPermission(
         }
         AppPermissionState(app = app, active = active)
     }
+}
+
+/**
+ * Apps que declaran el permiso en su manifiesto.
+ */
+private fun appsDeclaring(context: Context, permission: ManagedPermission): List<UserApp> {
+    val declared = permission.manifestPermission ?: return emptyList()
+    val fullPermission = "android.permission.$declared"
+    val pm = context.packageManager
+
+    return pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+        .asSequence()
+        .mapNotNull { pkg -> pkg.applicationInfo?.let { pkg to it } }
+        .filter { (_, info) -> (info.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
+        .filter { (pkg, _) -> pkg.packageName != context.packageName }
+        .filter { (pkg, _) -> pkg.requestedPermissions?.contains(fullPermission) == true }
+        .map { (pkg, info) ->
+            UserApp(packageName = pkg.packageName, label = pm.getApplicationLabel(info).toString())
+        }
+        .sortedBy { it.label.lowercase() }
+        .toList()
+}
+
+/**
+ * Apps con alguna actividad marcada con `android:supportsPictureInPicture="true"`.
+ * La imagen en imagen no tiene permiso en el manifiesto, se declara por actividad.
+ */
+private fun pipCapableApps(context: Context): List<UserApp> {
+    val pm = context.packageManager
+
+    return pm.getInstalledPackages(PackageManager.GET_ACTIVITIES)
+        .asSequence()
+        .filter { it.packageName != context.packageName }
+        .filter { pkg ->
+            pkg.activities?.any { activity ->
+                (activity.flags and ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE) != 0
+            } == true
+        }
+        .mapNotNull { pkg ->
+            pkg.applicationInfo?.let { info ->
+                UserApp(packageName = pkg.packageName, label = pm.getApplicationLabel(info).toString())
+            }
+        }
+        .sortedBy { it.label.lowercase() }
+        .toList()
 }
 
 private fun readState(
@@ -122,28 +156,43 @@ private fun isPermissionGranted(
     context: Context,
     packageName: String,
     permission: ManagedPermission
-): Boolean = context.packageManager.checkPermission(
-    "android.permission.${permission.name}",
-    packageName
-) == PackageManager.PERMISSION_GRANTED
+): Boolean {
+    val declared = permission.manifestPermission ?: permission.name
+    return context.packageManager.checkPermission(
+        "android.permission.$declared",
+        packageName
+    ) == PackageManager.PERMISSION_GRANTED
+}
 
 /**
- * Consulta el modo de un app op. Si la operación no existe (por ejemplo INTERNET),
- * se usa el permiso concedido según PackageManager.
+ * Consulta el modo de un app op. Si la operación no existe en esta ROM, se prueba con
+ * SEND_SMS (SMS Premium) y, como último recurso, con el permiso concedido.
  */
 private fun readAppOpsState(
     context: Context,
     packageName: String,
     permission: ManagedPermission
 ): Boolean {
-    val result = ShizukuShell.run("appops", "get", packageName, appOpsName(permission.name))
-    if (result.ok) {
-        val output = result.stdout.lowercase()
-        if ("ignore" in output || "deny" in output) return false
-        if ("allow" in output) return true
+    readOpMode(packageName, appOpsName(permission.name))?.let { return it }
+
+    if (permission.name == "SMS_PREMIUM") {
+        readOpMode(packageName, "SEND_SMS")?.let { return it }
     }
 
     return isPermissionGranted(context, packageName, permission)
+}
+
+/**
+ * null cuando el app op no existe o no tiene un modo explícito.
+ */
+private fun readOpMode(packageName: String, op: String): Boolean? {
+    val result = ShizukuShell.run("appops", "get", packageName, op)
+    if (!result.ok) return null
+
+    val output = result.stdout.lowercase()
+    if ("ignore" in output || "deny" in output) return false
+    if ("allow" in output) return true
+    return null
 }
 
 /**
@@ -191,9 +240,10 @@ suspend fun setPermissionState(
         }
 
         Strategy.PERMISSION -> {
+            val declared = permission.manifestPermission ?: permission.name
             val action = if (active) "grant" else "revoke"
             val result = ShizukuShell.run(
-                "pm", action, packageName, "android.permission.${permission.name}"
+                "pm", action, packageName, "android.permission.$declared"
             )
             result.toToggleResult()
         }
